@@ -12,6 +12,7 @@ import { config } from "dotenv";
 import { Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { withPaymentInterceptor } from "x402-axios";
+import z from "zod";
 
 config();
 
@@ -26,23 +27,25 @@ const account = privateKeyToAccount(privateKey);
 
 const client = withPaymentInterceptor(axios.create({ baseURL }), account);
 
-// Create an MCP server
 const server = new McpServer({
-  name: "x402 MCP Client Demo",
+  name: "Coinchase",
   version: "1.0.0",
 });
 
-// Add an addition tool
-server.tool("purchase-product", "Get the products in the store", {}, async () => {
-  // return {
-  //   content: [{ type: "text", text: account.address }],
-  // };
-  const res = await client.get(baseURL + "/buy/hoodie");
-
-  return {
-    content: [{ type: "text", text: "Purchased" }],
-  };
-});
+server.tool(
+  "purchase product",
+  "Purchase a product from the store by its ID",
+  {
+    productId: z.string().describe("The ID of the product to purchase (e.g., 'hoodie', 'shirt')"),
+  },
+  async params => {
+    const { productId } = params;
+    const res = await client.get(`${baseURL}/buy/${productId}`);
+    return {
+      content: [{ type: "text", text: `Purchased product: ${productId}` }],
+    };
+  },
+);
 
 server.tool("get-products", "Get the products in the store", {}, async () => {
   // return {
