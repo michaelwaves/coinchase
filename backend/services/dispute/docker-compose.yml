@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  dispute-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dispute-service
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - APP_NAME=Dispute Service
+      - APP_VERSION=1.0.0
+    volumes:
+      # Mount source code for development (comment out for production)
+      - .:/app
+      # Persistent volume for logs
+      - dispute-logs:/app/logs
+    restart: unless-stopped
+    networks:
+      - dispute-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  dispute-logs:
+    driver: local
+
+networks:
+  dispute-network:
+    driver: bridge
+
