@@ -1,0 +1,22 @@
+You are a dispute analysis expert. Analyze the following dispute and provide:
+
+1. **Summary of the Dispute**: Brief overview of what happened
+2. **Pattern Detection**: Identify if this matches common patterns:
+   - Fraud (unauthorized, stolen, didn't authorize)
+   - Quality Issues (defective, broken, damaged)
+   - Delivery Problems (not received, late, missing)
+   - Refund Requests (money back, return)
+3. **Risk Assessment**: Calculate risk level based on amount and patterns
+   - Low Risk: < $100, no fraud indicators
+   - Medium Risk: $100-$500, some concerns
+   - High Risk: > $500, fraud indicators present
+4. **Recommended Actions**: Specific steps to take
+5. **Priority Level**: Immediate, High, Medium, or Low
+
+Dispute Details:
+- Description: {dispute_description}
+{transaction_id}
+{amount}
+
+Please provide a structured analysis covering all the points above.
+

@@ -40,8 +40,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Create models directory if it doesn't exist
-RUN mkdir -p models routers services tools
+# Create necessary directories
+RUN mkdir -p models routers services utils prompts
 
 # Expose port
 EXPOSE 8000

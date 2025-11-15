@@ -1,9 +1,8 @@
 """
 Service layer for Claude Agent SDK interactions.
 """
-from typing import AsyncIterator
 from claude_agent_sdk import query, ClaudeAgentOptions, AssistantMessage, TextBlock
-from tools.dispute_tools import create_dispute_tools_server
+from utils.prompt_loader import PromptLoader
 
 
 class ClaudeService:
@@ -19,6 +18,7 @@ class ClaudeService:
         """
         self.max_turns = max_turns
         self.allowed_tools = allowed_tools or ["Read"]
+        self.prompt_loader = PromptLoader()
         
     async def analyze_dispute(
         self,
@@ -37,40 +37,22 @@ class ClaudeService:
         Returns:
             str: Claude's analysis of the dispute
         """
-        # Build comprehensive prompt with pattern analysis logic built-in
-        prompt = f"""
-You are a dispute analysis expert. Analyze the following dispute and provide:
-
-1. **Summary of the Dispute**: Brief overview of what happened
-2. **Pattern Detection**: Identify if this matches common patterns:
-   - Fraud (unauthorized, stolen, didn't authorize)
-   - Quality Issues (defective, broken, damaged)
-   - Delivery Problems (not received, late, missing)
-   - Refund Requests (money back, return)
-3. **Risk Assessment**: Calculate risk level based on amount and patterns
-   - Low Risk: < $100, no fraud indicators
-   - Medium Risk: $100-$500, some concerns
-   - High Risk: > $500, fraud indicators present
-4. **Recommended Actions**: Specific steps to take
-5. **Priority Level**: Immediate, High, Medium, or Low
-
-Dispute Details:
-- Description: {dispute_description}
-"""
-        if transaction_id:
-            prompt += f"- Transaction ID: {transaction_id}\n"
-        if amount:
-            prompt += f"- Amount: ${amount}\n"
+        # Load and format prompt from file
+        prompt = self.prompt_loader.format_prompt(
+            "dispute_analysis",
+            dispute_description=dispute_description,
+            transaction_id=transaction_id,
+            amount=amount
+        )
         
-        prompt += """
-Please provide a structured analysis covering all the points above.
-"""
+        # Get system prompt
+        system_prompt = self.prompt_loader.get_system_prompt("dispute_analysis")
         
-        # Configure Claude options (simplified - no custom MCP tools for now)
+        # Configure Claude options
         options = ClaudeAgentOptions(
             max_turns=self.max_turns,
-            allowed_tools=[],  # No tools needed - Claude will analyze based on prompt
-            system_prompt="You are an expert dispute analyst with deep knowledge of payment disputes, fraud patterns, and customer service best practices."
+            allowed_tools=[],
+            system_prompt=system_prompt
         )
         
         # Query Claude and collect response
