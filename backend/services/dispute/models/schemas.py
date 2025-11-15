@@ -65,7 +65,7 @@ class DisputeAnalysisResponse(BaseModel):
     
     # General
     message: str = Field(..., description="Message to display")
-    step: int = Field(default=1, description="Current step in the process (1-3)")
+    step: int = Field(default=1, description="Current step in the process (1-2 follow-ups)")
 
 
 class HealthResponse(BaseModel):

@@ -40,11 +40,31 @@ class PromptLoader:
             self._system_prompts = {}
             
             with open(system_prompts_file, 'r') as f:
-                for line in f:
-                    line = line.strip()
-                    if line and ':' in line:
-                        key, value = line.split(':', 1)
-                        self._system_prompts[key.strip()] = value.strip()
+                content = f.read()
+            
+            # Parse multi-line prompts separated by key: value format
+            # Each prompt starts with "key:" on its own consideration
+            current_key = None
+            current_lines = []
+            
+            for line in content.split('\n'):
+                # Check if this is a new prompt key (has : and no leading space)
+                if line and not line.startswith(' ') and not line.startswith('\t') and ':' in line:
+                    # Save previous prompt if exists
+                    if current_key:
+                        self._system_prompts[current_key] = '\n'.join(current_lines).strip()
+                    
+                    # Start new prompt
+                    key, value = line.split(':', 1)
+                    current_key = key.strip()
+                    current_lines = [value.strip()] if value.strip() else []
+                elif current_key:
+                    # Continue current prompt
+                    current_lines.append(line)
+            
+            # Save last prompt
+            if current_key:
+                self._system_prompts[current_key] = '\n'.join(current_lines).strip()
         
         return self._system_prompts
     

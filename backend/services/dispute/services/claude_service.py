@@ -37,7 +37,8 @@ class ClaudeService:
         self,
         dispute_description: str,
         transaction_id: str = None,
-        amount: float = None
+        amount: float = None,
+        conversation_history: list[dict] = None
     ) -> str:
         """
         Analyze a dispute using Claude Agent SDK.
@@ -46,6 +47,7 @@ class ClaudeService:
             dispute_description: Description of the dispute
             transaction_id: Optional transaction ID
             amount: Optional disputed amount
+            conversation_history: Optional conversation history for multi-turn
             
         Returns:
             str: Claude's analysis of the dispute
@@ -64,14 +66,18 @@ class ClaudeService:
             # Get system prompt
             system_prompt = self.prompt_loader.get_system_prompt("dispute_analysis")
             
+            # Build messages from history or single message
+            if conversation_history:
+                messages = conversation_history
+            else:
+                messages = [{"role": "user", "content": user_prompt}]
+            
             # Call Claude API directly
             message = self.client.messages.create(
-                model="claude-sonnet-4-20250514",
+                model="claude-haiku-4-5",
                 max_tokens=4096,
                 system=system_prompt,
-                messages=[
-                    {"role": "user", "content": user_prompt}
-                ]
+                messages=messages
             )
             
             # Extract text response
@@ -100,7 +106,7 @@ class ClaudeService:
         """
         try:
             message = self.client.messages.create(
-                model="claude-sonnet-4-20250514",
+                model="claude-haiku-4-5",
                 max_tokens=1024,
                 messages=[
                     {"role": "user", "content": prompt}

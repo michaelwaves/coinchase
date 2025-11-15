@@ -76,9 +76,9 @@ async def analyze_dispute_conversation(
     
     This endpoint supports a conversational flow:
     1. Initial request with dispute description
-    2. Agent may request additional evidence
+    2. Agent may request additional evidence (max 2 requests)
     3. Follow-up requests provide evidence using session_id
-    4. Agent makes final decision within 3 steps
+    4. Agent makes final decision with certainty %
     
     Example initial request:
     ```json
@@ -121,7 +121,7 @@ async def analyze_dispute_conversation(
             if session.step >= 3:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Maximum 3 steps reached. Session complete."
+                    detail="Maximum 2 follow-ups reached. Decision must be made."
                 )
             
             session.increment_step()
@@ -133,11 +133,11 @@ async def analyze_dispute_conversation(
                 evidence_data = request.additional_evidence.get("data", {})
                 
                 # Format evidence as a response to the agent's request
-                evidence_text = f"\n\n📋 {evidence_type.upper()} EVIDENCE PROVIDED:\n"
+                evidence_text = f"\n{evidence_type.upper()} EVIDENCE:\n"
                 for key, value in evidence_data.items():
-                    evidence_text += f"  • {key}: {value}\n"
+                    evidence_text += f"- {key}: {value}\n"
                 
-                prompt = f"{request.dispute_description}\n{evidence_text}\n\nBased on this evidence, make your decision."
+                prompt = f"{evidence_text}\nNow make your final decision with certainty %."
                 session.add_evidence(evidence_type)
             else:
                 prompt = request.dispute_description
@@ -159,15 +159,12 @@ async def analyze_dispute_conversation(
                     logger.info(f"Auto-loaded shipment evidence for {request.transaction_id}")
             
             # Format initial prompt
-            prompt = f"""Analyze this dispute and decide whether to approve or deny the refund.
+            prompt = f"""DISPUTE CASE:
+Transaction: {request.transaction_id or 'Not provided'}
+Amount: ${request.amount or 'Not provided'}
+Claim: {request.dispute_description}{shipment_evidence_text}
 
-DISPUTE DETAILS:
-- Transaction ID: {request.transaction_id or 'Not provided'}
-- Amount: ${request.amount or 'Not provided'}
-- Description: {request.dispute_description}{shipment_evidence_text}
-
-Remember: You have up to 3 steps total. Make your decision as soon as you have sufficient evidence.
-If you need more evidence, respond with REQUEST_EVIDENCE:USER_PROMPT or REQUEST_EVIDENCE:AGENT_DECISION"""
+Make your decision with certainty %. If certainty < 70%, request additional evidence (max 2 requests)."""
         
         # Store in conversation history
         session.add_to_history("user", prompt)
@@ -178,11 +175,12 @@ If you need more evidence, respond with REQUEST_EVIDENCE:USER_PROMPT or REQUEST_
             allowed_tools=config.get("allowed_tools", ["Read"])
         )
         
-        # Get analysis
+        # Get analysis with full conversation history
         analysis = await claude_service.analyze_dispute(
             dispute_description=prompt,
             transaction_id=request.transaction_id,
-            amount=request.amount
+            amount=request.amount,
+            conversation_history=session.get_history()
         )
         
         session.add_to_history("assistant", analysis)
@@ -230,7 +228,7 @@ If you need more evidence, respond with REQUEST_EVIDENCE:USER_PROMPT or REQUEST_
         else:  # analyzing
             # Agent is still thinking, force a decision if at step 3
             if session.step >= 3:
-                logger.warning(f"Session {session.session_id}: Max steps reached, forcing decision")
+                logger.warning(f"Session {session.session_id}: Max follow-ups reached, forcing decision")
                 return DisputeAnalysisResponse(
                     status="completed",
                     session_id=None,
@@ -238,10 +236,10 @@ If you need more evidence, respond with REQUEST_EVIDENCE:USER_PROMPT or REQUEST_
                     decision=DisputeDecision(
                         decision="DENY_REFUND",
                         confidence=0.5,
-                        justification="Insufficient evidence collected within 3-step limit. Denying refund as a conservative measure. Customer may resubmit with complete evidence.",
+                        justification="Insufficient evidence after 2 follow-ups. Default DENY to prevent fraud.",
                         evidence_reviewed=session.evidence_collected
                     ),
-                    message="Maximum steps reached. Default decision applied.",
+                    message="Maximum follow-ups reached. Default decision applied.",
                     step=session.step
                 )
             

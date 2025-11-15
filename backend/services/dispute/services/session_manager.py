@@ -39,6 +39,13 @@ class DisputeSession:
             "timestamp": datetime.utcnow().isoformat()
         })
     
+    def get_history(self) -> list[dict]:
+        """Get conversation history formatted for Claude API."""
+        return [
+            {"role": msg["role"], "content": msg["content"]}
+            for msg in self.conversation_history
+        ]
+    
     def is_expired(self, timeout_minutes: int = 30) -> bool:
         """Check if session has expired."""
         return datetime.utcnow() - self.last_accessed > timedelta(minutes=timeout_minutes)
