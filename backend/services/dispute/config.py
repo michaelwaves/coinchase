@@ -15,6 +15,12 @@ class Settings(BaseSettings):
     # Anthropic API Configuration
     anthropic_api_key: str
     
+    # Locus API Configuration (supports both OAuth and API Key auth)
+    locus_api_key: str = ""  # Simple API key authentication
+    locus_client_id: str = ""  # OAuth Client ID
+    locus_client_secret: str = ""  # OAuth Client Secret
+    locus_mcp_url: str = "https://mcp.paywithlocus.com/mcp"
+    
     # Claude Agent Configuration
     max_turns: int = 5
     allowed_tools: list[str] = ["Read", "Write", "Bash"]
