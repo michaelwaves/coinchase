@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "merchant": "tsx services/merchant/index.ts"
+    "dev": "tsx index.ts"
   },
   "dependencies": {
     "@coinbase/x402": "^0.7.1",

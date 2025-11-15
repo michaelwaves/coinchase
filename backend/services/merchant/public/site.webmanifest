@@ -1,0 +1,15 @@
+{
+  "name": "Locus Store",
+  "short_name": "Locus Store",
+  "icons": [
+    {
+      "src": "https://media.licdn.com/dms/image/v2/D4E0BAQFdCda6xVBL3g/company-logo_200_200/B4EZoTMxbBKcAI-/0/1761258706952/paywithlocus_logo?e=1764806400&v=beta&t=01rJQ_k8RjyhlQFQ5rnAB72C34H7hbKSyxBjwkZS5pE",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "theme_color": "#ffffff",
+  "background_color": "#ffffff",
+  "display": "standalone"
+}
