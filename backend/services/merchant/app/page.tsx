@@ -1,7 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import WordmarkCondensed from "./assets/x402_wordmark_light.svg";
-import { products } from "@/middleware";
+import { products } from "@/lib/products";
 
 export default function Home() {
   return (

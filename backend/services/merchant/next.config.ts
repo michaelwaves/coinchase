@@ -21,11 +21,20 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  webpack(config) {
+  serverExternalPackages: ["@coinbase/x402", "@coinbase/cdp-sdk", "axios"],
+  webpack(config, { nextRuntime }) {
     config.module.rules.push({
       test: /\.svg$/,
       use: ["@svgr/webpack"],
     });
+
+    if (nextRuntime === "edge") {
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        axios: false,
+      };
+    }
+
     return config;
   },
 };

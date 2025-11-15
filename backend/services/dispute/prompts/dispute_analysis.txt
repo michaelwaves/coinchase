@@ -1,0 +1,7 @@
+DISPUTE CASE:
+- Description: {dispute_description}
+{transaction_id}
+{amount}
+
+Provide your decision in the required format with certainty percentage.
+

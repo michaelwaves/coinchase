@@ -1,0 +1,13 @@
+{
+  "dispute_analysis": {
+    "file": "dispute_analysis.txt",
+    "description": "Main prompt for analyzing payment disputes",
+    "variables": [
+      "dispute_description",
+      "transaction_id",
+      "amount"
+    ],
+    "system_prompt": "dispute_analyst"
+  }
+}
+
