@@ -37,27 +37,52 @@ async def analyze_dispute(
     Raises:
         HTTPException: If analysis fails
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
     try:
+        logger.info("🚀 Received dispute analysis request")
+        logger.info(f"Transaction ID: {request.transaction_id}")
+        logger.info(f"Amount: {request.amount}")
+        logger.info(f"Description length: {len(request.dispute_description)} chars")
+        logger.info(f"Config: {config}")
+        
         # Initialize Claude service with config
+        logger.info("Initializing Claude service")
         claude_service = ClaudeService(
             max_turns=config.get("max_turns", 5),
             allowed_tools=config.get("allowed_tools", ["Read"])
         )
+        logger.info("Claude service initialized")
         
         # Perform analysis
+        logger.info("Calling claude_service.analyze_dispute")
         analysis = await claude_service.analyze_dispute(
             dispute_description=request.dispute_description,
             transaction_id=request.transaction_id,
             amount=request.amount
         )
+        logger.info(f"Analysis completed, length: {len(analysis)} chars")
         
-        return DisputeAnalysisResponse(
+        response = DisputeAnalysisResponse(
             analysis=analysis,
             transaction_id=request.transaction_id,
             status="completed"
         )
+        logger.info("✅ Returning successful response")
+        return response
         
     except Exception as e:
+        logger.error("❌ Exception in analyze_dispute endpoint")
+        logger.error(f"Exception type: {type(e).__name__}")
+        logger.error(f"Exception message: {str(e)}")
+        logger.error("Full traceback:", exc_info=True)
+        
+        # Try to extract more details from the exception
+        import traceback
+        tb_str = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
+        logger.error(f"Detailed traceback:\n{tb_str}")
+        
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to analyze dispute: {str(e)}"

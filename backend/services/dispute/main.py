@@ -1,6 +1,7 @@
 """
 Main FastAPI application for Dispute Service.
 """
+import logging
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Annotated
@@ -8,6 +9,23 @@ from typing import Annotated
 from config import Settings, get_settings
 from models.schemas import HealthResponse
 from routers import claude
+
+# Configure comprehensive logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler()
+    ]
+)
+
+# Set specific loggers to DEBUG for more detail
+logging.getLogger('services.claude_service').setLevel(logging.DEBUG)
+logging.getLogger('tools.shipment_evidence').setLevel(logging.DEBUG)
+logging.getLogger('routers.claude').setLevel(logging.DEBUG)
+
+logger = logging.getLogger(__name__)
+logger.info("🚀 Starting Dispute Service application")
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -17,6 +35,7 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc"
 )
+logger.info("FastAPI app initialized")
 
 # Configure CORS
 app.add_middleware(
@@ -29,6 +48,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(claude.router)
+logger.info("Routers registered successfully")
 
 
 @app.get("/", response_model=HealthResponse)
