@@ -10,8 +10,8 @@ const payToAddress = process.env.MERCHANT_WALLET_ADDRESS as `0x${string}`;
 // The CDP API key ID and secret are required to use the mainnet facilitator
 if (
   !payToAddress ||
-  !process.env.MERCHANT_CDP_API_KEY_ID ||
-  !process.env.MERCHANT_CDP_API_KEY_SECRET
+  !process.env.CDP_API_KEY_ID ||
+  !process.env.CDP_API_KEY_SECRET
 ) {
   console.error("Missing required environment variables");
   process.exit(1);
@@ -46,7 +46,10 @@ app.use(
       },
       {} as Record<string, any>
     ),
-    facilitator
+    facilitator,
+    {
+      appName: "Locus Store",
+    }
   )
 );
 
