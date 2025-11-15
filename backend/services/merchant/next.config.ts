@@ -21,10 +21,8 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  experimental: {
-    serverComponentsExternalPackages: ["@coinbase/x402", "@coinbase/cdp-sdk"],
-  },
-  webpack(config, { isServer, nextRuntime }) {
+  serverExternalPackages: ["@coinbase/x402", "@coinbase/cdp-sdk", "axios"],
+  webpack(config, { nextRuntime }) {
     config.module.rules.push({
       test: /\.svg$/,
       use: ["@svgr/webpack"],
@@ -33,15 +31,8 @@ const nextConfig: NextConfig = {
     if (nextRuntime === "edge") {
       config.resolve.alias = {
         ...config.resolve.alias,
-        "supports-color": false,
-        debug: false,
+        axios: false,
       };
-
-      config.externals = config.externals || [];
-      config.externals.push({
-        bufferutil: "bufferutil",
-        "utf-8-validate": "utf-8-validate",
-      });
     }
 
     return config;

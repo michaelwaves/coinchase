@@ -24,7 +24,13 @@ class Settings(BaseSettings):
     # Claude Agent Configuration
     max_turns: int = 5
     allowed_tools: list[str] = ["Read", "Write", "Bash"]
-    
+
+    # CDP Wallet Configuration
+    cdp_api_key_id: str = ""
+    cdp_api_key_secret: str = ""
+    public_merchant_wallet_address: str = ""
+    merchant_wallet_private_key: str = ""
+
     class Config:
         env_file = ".env"
         case_sensitive = False
