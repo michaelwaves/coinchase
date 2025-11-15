@@ -3,7 +3,7 @@ Multi-turn dispute resolution conversation endpoint.
 """
 import logging
 import re
-from typing import Annotated
+from typing import Annotated, Tuple, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from models.schemas import (
@@ -13,8 +13,8 @@ from models.schemas import (
     DisputeDecision
 )
 from services.claude_service import ClaudeService
-from services.session_manager import get_session_manager
-from dependencies import verify_api_key, get_claude_config
+from services.session_manager import get_session_manager, DisputeSession
+from dependencies import verify_api_key
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ router = APIRouter(
 )
 
 
-def parse_agent_response(response_text: str, step: int) -> tuple[str, dict]:
+def parse_agent_response(response_text: str, step: int) -> Tuple[str, dict]:
     """
     Parse agent response to determine if it's requesting evidence or making a decision.
     
@@ -65,51 +65,132 @@ def parse_agent_response(response_text: str, step: int) -> tuple[str, dict]:
     return ("analyzing", {"message": response_text})
 
 
+def _get_shipment_evidence(transaction_id: str) -> Optional[str]:
+    """Get shipment evidence if available for transaction."""
+    if not transaction_id:
+        return None
+    
+    try:
+        from tools.shipment_evidence import get_shipment_evidence_tool
+        tool = get_shipment_evidence_tool()
+        result = tool.check_delivery_status(transaction_id)
+        
+        if result["found"]:
+            logger.info(f"Auto-loaded shipment evidence for {transaction_id}")
+            return f"\n\n📦 SHIPMENT EVIDENCE (already checked):\n{result['summary']}"
+    except Exception as e:
+        logger.warning(f"Failed to load shipment evidence: {e}")
+    
+    return None
+
+
+def _format_evidence_prompt(evidence_type: str, evidence_data: dict) -> str:
+    """Format evidence data into a prompt."""
+    evidence_text = f"\n{evidence_type.upper()} EVIDENCE:\n"
+    for key, value in evidence_data.items():
+        evidence_text += f"- {key}: {value}\n"
+    return f"{evidence_text}\nNow make your final decision with certainty %."
+
+
+def _format_initial_prompt(request: DisputeAnalysisRequest, shipment_evidence: Optional[str]) -> str:
+    """Format the initial dispute prompt."""
+    shipment_text = shipment_evidence or ""
+    return f"""DISPUTE CASE:
+Transaction: {request.transaction_id or 'Not provided'}
+Amount: ${request.amount or 'Not provided'}
+Claim: {request.dispute_description}{shipment_text}
+
+Make your decision with certainty %. If certainty < 70%, request additional evidence (max 2 requests)."""
+
+
+def _build_needs_evidence_response(
+    session: DisputeSession,
+    request: DisputeAnalysisRequest,
+    data: dict
+) -> DisputeAnalysisResponse:
+    """Build response when agent needs more evidence."""
+    logger.info(f"Session {session.session_id}: Requesting {data['evidence_type']} evidence")
+    return DisputeAnalysisResponse(
+        status="needs_evidence",
+        session_id=session.session_id,
+        transaction_id=request.transaction_id,
+        evidence_requested=EvidenceRequest(**data),
+        message=f"Additional evidence required: {data['evidence_type']}. Please provide this evidence in your next request using the session_id.",
+        step=session.step
+    )
+
+
+def _build_completed_response(
+    session: DisputeSession,
+    request: DisputeAnalysisRequest,
+    data: dict,
+    session_manager
+) -> DisputeAnalysisResponse:
+    """Build response when agent has made a decision."""
+    logger.info(f"Session {session.session_id}: Decision made - {data['decision']}")
+    
+    # Extract evidence types from session
+    evidence_reviewed = session.evidence_collected.copy()
+    if request.transaction_id:
+        evidence_reviewed.append("dispute_description")
+    
+    # Clean up session
+    session_manager.delete_session(session.session_id)
+    
+    return DisputeAnalysisResponse(
+        status="completed",
+        session_id=None,
+        transaction_id=request.transaction_id,
+        decision=DisputeDecision(
+            decision=data["decision"],
+            confidence=data["confidence"],
+            justification=data["justification"],
+            evidence_reviewed=evidence_reviewed
+        ),
+        message=f"Decision: {data['decision']}",
+        step=session.step
+    )
+
+
+def _build_default_decision_response(
+    session: DisputeSession,
+    request: DisputeAnalysisRequest
+) -> DisputeAnalysisResponse:
+    """Build default denial response when max steps reached."""
+    logger.warning(f"Session {session.session_id}: Max follow-ups reached, forcing decision")
+    return DisputeAnalysisResponse(
+        status="completed",
+        session_id=None,
+        transaction_id=request.transaction_id,
+        decision=DisputeDecision(
+            decision="DENY_REFUND",
+            confidence=0.5,
+            justification="Insufficient evidence after 2 follow-ups. Default DENY to prevent fraud.",
+            evidence_reviewed=session.evidence_collected
+        ),
+        message="Maximum follow-ups reached. Default decision applied.",
+        step=session.step
+    )
+
+
 @router.post("/analyze", response_model=DisputeAnalysisResponse)
 async def analyze_dispute_conversation(
     request: DisputeAnalysisRequest,
-    api_key: Annotated[str, Depends(verify_api_key)],
-    config: Annotated[dict, Depends(get_claude_config)]
+    api_key: Annotated[str, Depends(verify_api_key)]
 ) -> DisputeAnalysisResponse:
     """
     Multi-turn dispute analysis with evidence collection.
     
-    This endpoint supports a conversational flow:
+    Flow:
     1. Initial request with dispute description
     2. Agent may request additional evidence (max 2 requests)
     3. Follow-up requests provide evidence using session_id
     4. Agent makes final decision with certainty %
-    
-    Example initial request:
-    ```json
-    {
-        "dispute_description": "Customer claims item not received",
-        "transaction_id": "TXN-123",
-        "amount": 99.99
-    }
-    ```
-    
-    Example follow-up with evidence:
-    ```json
-    {
-        "dispute_description": "Providing requested evidence",
-        "transaction_id": "TXN-123",
-        "session_id": "previous-session-id",
-        "additional_evidence": {
-            "type": "user_prompt",
-            "data": {
-                "original_prompt": "Buy me headphones under $100",
-                "authorized_budget": 100.00,
-                ...
-            }
-        }
-    }
-    ```
     """
     session_manager = get_session_manager()
     
     try:
-        # Check if this is a continuation of existing session
+        # Handle existing or new session
         if request.session_id:
             session = session_manager.get_session(request.session_id)
             if not session:
@@ -127,55 +208,33 @@ async def analyze_dispute_conversation(
             session.increment_step()
             logger.info(f"Continuing session: {session.session_id}, step {session.step}")
             
-            # Format additional evidence if provided
+            # Format evidence if provided
             if request.additional_evidence:
                 evidence_type = request.additional_evidence.get("type")
                 evidence_data = request.additional_evidence.get("data", {})
-                
-                # Format evidence as a response to the agent's request
-                evidence_text = f"\n{evidence_type.upper()} EVIDENCE:\n"
-                for key, value in evidence_data.items():
-                    evidence_text += f"- {key}: {value}\n"
-                
-                prompt = f"{evidence_text}\nNow make your final decision with certainty %."
+                prompt = _format_evidence_prompt(evidence_type, evidence_data)
                 session.add_evidence(evidence_type)
             else:
                 prompt = request.dispute_description
         else:
-            # New session
+            # Create new session
             session = session_manager.create_session(request.transaction_id or "unknown")
             session.increment_step()
             logger.info(f"New dispute analysis session: {session.session_id}, step {session.step}")
             
-            # Check if we can get shipment evidence automatically
-            shipment_evidence_text = ""
-            if request.transaction_id:
-                from tools.shipment_evidence import get_shipment_evidence_tool
-                tool = get_shipment_evidence_tool()
-                result = tool.check_delivery_status(request.transaction_id)
-                if result["found"]:
-                    shipment_evidence_text = f"\n\n📦 SHIPMENT EVIDENCE (already checked):\n{result['summary']}"
-                    session.add_evidence("shipment_evidence")
-                    logger.info(f"Auto-loaded shipment evidence for {request.transaction_id}")
+            # Check for shipment evidence
+            shipment_evidence = _get_shipment_evidence(request.transaction_id)
+            if shipment_evidence:
+                session.add_evidence("shipment_evidence")
             
-            # Format initial prompt
-            prompt = f"""DISPUTE CASE:
-Transaction: {request.transaction_id or 'Not provided'}
-Amount: ${request.amount or 'Not provided'}
-Claim: {request.dispute_description}{shipment_evidence_text}
-
-Make your decision with certainty %. If certainty < 70%, request additional evidence (max 2 requests)."""
+            prompt = _format_initial_prompt(request, shipment_evidence)
         
         # Store in conversation history
         session.add_to_history("user", prompt)
         
-        # Initialize Claude service
-        claude_service = ClaudeService(
-            max_turns=config.get("max_turns", 5),
-            allowed_tools=config.get("allowed_tools", ["Read"])
-        )
+        # Get Claude analysis
+        claude_service = ClaudeService()
         
-        # Get analysis with full conversation history
         analysis = await claude_service.analyze_dispute(
             dispute_description=prompt,
             transaction_id=request.transaction_id,
@@ -185,65 +244,19 @@ Make your decision with certainty %. If certainty < 70%, request additional evid
         
         session.add_to_history("assistant", analysis)
         
-        # Parse response
+        # Parse and route response
         status_type, data = parse_agent_response(analysis, session.step)
         
-        # Build response based on status
         if status_type == "needs_evidence":
-            logger.info(f"Session {session.session_id}: Requesting {data['evidence_type']} evidence")
-            return DisputeAnalysisResponse(
-                status="needs_evidence",
-                session_id=session.session_id,
-                transaction_id=request.transaction_id,
-                evidence_requested=EvidenceRequest(**data),
-                message=f"Additional evidence required: {data['evidence_type']}. Please provide this evidence in your next request using the session_id.",
-                step=session.step
-            )
+            return _build_needs_evidence_response(session, request, data)
         
         elif status_type == "completed":
-            logger.info(f"Session {session.session_id}: Decision made - {data['decision']}")
-            
-            # Extract evidence types from session
-            evidence_reviewed = session.evidence_collected.copy()
-            if request.transaction_id:
-                evidence_reviewed.append("dispute_description")
-            
-            # Clean up session
-            session_manager.delete_session(session.session_id)
-            
-            return DisputeAnalysisResponse(
-                status="completed",
-                session_id=None,  # Session is complete
-                transaction_id=request.transaction_id,
-                decision=DisputeDecision(
-                    decision=data["decision"],
-                    confidence=data["confidence"],
-                    justification=data["justification"],
-                    evidence_reviewed=evidence_reviewed
-                ),
-                message=f"Decision: {data['decision']}",
-                step=session.step
-            )
+            return _build_completed_response(session, request, data, session_manager)
         
         else:  # analyzing
-            # Agent is still thinking, force a decision if at step 3
             if session.step >= 3:
-                logger.warning(f"Session {session.session_id}: Max follow-ups reached, forcing decision")
-                return DisputeAnalysisResponse(
-                    status="completed",
-                    session_id=None,
-                    transaction_id=request.transaction_id,
-                    decision=DisputeDecision(
-                        decision="DENY_REFUND",
-                        confidence=0.5,
-                        justification="Insufficient evidence after 2 follow-ups. Default DENY to prevent fraud.",
-                        evidence_reviewed=session.evidence_collected
-                    ),
-                    message="Maximum follow-ups reached. Default decision applied.",
-                    step=session.step
-                )
+                return _build_default_decision_response(session, request)
             
-            # Continue analysis in next step
             return DisputeAnalysisResponse(
                 status="analyzing",
                 session_id=session.session_id,
@@ -256,6 +269,7 @@ Make your decision with certainty %. If certainty < 70%, request additional evid
         raise
     except Exception as e:
         logger.error(f"Error in dispute analysis: {str(e)}", exc_info=True)
+        
         # Clean up session on error
         if request.session_id:
             session_manager.delete_session(request.session_id)
@@ -264,4 +278,3 @@ Make your decision with certainty %. If certainty < 70%, request additional evid
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to analyze dispute: {str(e)}"
         )
-

@@ -13,16 +13,8 @@ logger = logging.getLogger(__name__)
 class ClaudeService:
     """Service for interacting with Claude API."""
     
-    def __init__(self, max_turns: int = 5, allowed_tools: list[str] = None):
-        """
-        Initialize Claude service.
-        
-        Args:
-            max_turns: Maximum conversation turns
-            allowed_tools: List of allowed tools (not used in API mode)
-        """
-        self.max_turns = max_turns
-        self.allowed_tools = allowed_tools or []
+    def __init__(self):
+        """Initialize Claude service."""
         self.prompt_loader = PromptLoader()
         
         # Initialize Anthropic client
@@ -31,7 +23,7 @@ class ClaudeService:
             raise ValueError("ANTHROPIC_API_KEY environment variable is not set")
         
         self.client = Anthropic(api_key=api_key)
-        logger.info("Claude service initialized with direct API access")
+        logger.info("Claude service initialized")
         
     async def analyze_dispute(
         self,
@@ -91,36 +83,5 @@ class ClaudeService:
             
         except Exception as e:
             logger.error(f"Error in analyze_dispute: {str(e)}", exc_info=True)
-            raise
-    
-    async def simple_query(self, prompt: str, use_tools: bool = False) -> str:
-        """
-        Send a simple query to Claude.
-        
-        Args:
-            prompt: The prompt to send
-            use_tools: Not used in API mode
-            
-        Returns:
-            str: Claude's response
-        """
-        try:
-            message = self.client.messages.create(
-                model="claude-haiku-4-5",
-                max_tokens=1024,
-                messages=[
-                    {"role": "user", "content": prompt}
-                ]
-            )
-            
-            result = ""
-            for block in message.content:
-                if block.type == "text":
-                    result += block.text
-            
-            return result if result else "No response generated."
-            
-        except Exception as e:
-            logger.error(f"Error in simple_query: {e}")
             raise
 

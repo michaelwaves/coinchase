@@ -130,11 +130,6 @@ class ShipmentEvidenceTool:
         if not evidence:
             return "No evidence available."
         
-        shipment = evidence.get("shipment", {})
-        delivery_conf = shipment.get("delivery_confirmation", {})
-        address = shipment.get("shipping_address", {})
-        return_info = shipment.get("return_logistics")
-        
         summary = f"""
 📦 Shipment Evidence Summary
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -142,43 +137,26 @@ class ShipmentEvidenceTool:
 Order Information:
   • Order ID: {evidence.get('order_id', 'N/A')}
   • Transaction ID: {evidence.get('transaction_id', 'N/A')}
-  • Customer: {evidence.get('customer_name', 'N/A')} ({evidence.get('customer_id', 'N/A')})
-  • Amount: ${evidence.get('amount', 0):.2f}
+  • Customer: {evidence.get('customer_name', 'N/A')}
 
 Shipping Details:
-  • Carrier: {shipment.get('carrier_name', 'N/A')}
-  • Tracking Number: {shipment.get('tracking_number', 'N/A')}
-  • Tracking ID: {shipment.get('tracking_id', 'N/A')}
-  • Shipping Date: {shipment.get('shipping_date', 'N/A')}
-  • Delivery Date: {shipment.get('delivery_date', 'Not yet delivered')}
+  • Carrier: {evidence.get('carrier', 'N/A')}
+  • Tracking Number: {evidence.get('tracking_number', 'N/A')}
+  • Shipping Date: {evidence.get('shipping_date', 'N/A')}
+  • Delivery Date: {evidence.get('delivery_date', 'Not yet delivered')}
+  • Status: {evidence.get('delivery_status', 'Unknown')}
 
 Shipping Address:
-  • {address.get('street', 'N/A')}
-  • {address.get('city', 'N/A')}, {address.get('state', 'N/A')} {address.get('zip_code', 'N/A')}
-  • {address.get('country', 'N/A')}
+  • {evidence.get('shipping_address', 'N/A')}
 
 Delivery Confirmation:
-  • Delivered: {'Yes' if shipment.get('delivery_date') else 'No'}
-  • Signature: {'Yes - ' + delivery_conf.get('signature_name', '') if delivery_conf.get('signature_present') else 'No'}
-  • Delivery Photo: {'Available' if delivery_conf.get('delivery_photo_url') else 'Not available'}
-  • Left At: {delivery_conf.get('left_at', 'N/A')}
-  • Delivery Timestamp: {shipment.get('delivery_timestamp', 'N/A')}
+  • Delivered: {'✅ Yes' if evidence.get('delivery_date') else '❌ No'}
+  • Signature: {evidence.get('signature', 'No signature')}
+  • Delivery Photo: {'✅ Available' if evidence.get('delivery_photo_url') else '❌ Not available'}
+  • Notes: {evidence.get('notes', 'N/A')}
 
-Supporting Documents:
-  • Shipping Label: {shipment.get('shipping_label_url', 'N/A')}
-  • Delivery Photo: {delivery_conf.get('delivery_photo_url', 'N/A')}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 """
-        
-        if return_info:
-            summary += f"""
-Return Logistics:
-  • Status: {return_info.get('status', 'N/A')}
-  • Current Location: {return_info.get('current_location', 'N/A')}
-  • Expected Delivery: {return_info.get('expected_delivery', 'N/A')}
-"""
-        
-        summary += "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        
         return summary
     
     def check_delivery_status(self, identifier: str) -> Dict[str, Any]:
@@ -208,8 +186,7 @@ Return Logistics:
                 "summary": None
             }
         
-        shipment = evidence.get("shipment", {})
-        delivered = bool(shipment.get("delivery_date"))
+        delivered = bool(evidence.get("delivery_date"))
         
         return {
             "found": True,
@@ -217,11 +194,11 @@ Return Logistics:
             "order_id": evidence.get("order_id"),
             "transaction_id": evidence.get("transaction_id"),
             "delivered": delivered,
-            "tracking_number": shipment.get("tracking_number"),
-            "carrier": shipment.get("carrier_name"),
-            "delivery_date": shipment.get("delivery_date"),
-            "has_signature": shipment.get("delivery_confirmation", {}).get("signature_present", False),
-            "has_photo": bool(shipment.get("delivery_confirmation", {}).get("delivery_photo_url")),
+            "tracking_number": evidence.get("tracking_number"),
+            "carrier": evidence.get("carrier"),
+            "delivery_date": evidence.get("delivery_date"),
+            "has_signature": bool(evidence.get("signature")),
+            "has_photo": bool(evidence.get("delivery_photo_url")),
             "summary": self.format_evidence_summary(evidence),
             "full_evidence": evidence
         }
