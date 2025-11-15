@@ -1,5 +1,5 @@
 import { Address } from "viem";
-import { paymentMiddleware, Network, Resource } from "x402-next";
+import { paymentMiddleware } from "x402-next";
 import { facilitator } from "@coinbase/x402";
 import { products } from "@/lib/products";
 

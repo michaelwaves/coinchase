@@ -21,11 +21,29 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  webpack(config) {
+  experimental: {
+    serverComponentsExternalPackages: ["@coinbase/x402", "@coinbase/cdp-sdk"],
+  },
+  webpack(config, { isServer, nextRuntime }) {
     config.module.rules.push({
       test: /\.svg$/,
       use: ["@svgr/webpack"],
     });
+
+    if (nextRuntime === "edge") {
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        "supports-color": false,
+        debug: false,
+      };
+
+      config.externals = config.externals || [];
+      config.externals.push({
+        bufferutil: "bufferutil",
+        "utf-8-validate": "utf-8-validate",
+      });
+    }
+
     return config;
   },
 };
