@@ -36,15 +36,10 @@ async def check_shipment_evidence_tool(args: dict[str, Any]) -> dict[str, Any]:
         Tool response with shipment evidence
     """
     try:
-        logger.info("="*60)
-        logger.info("🔧 TOOL CALLED: check_shipment_evidence")
-        logger.info(f"Arguments received: {args}")
-        
         identifier = args.get("identifier", "")
-        logger.info(f"Extracted identifier: '{identifier}'")
+        logger.info(f"🔧 Tool called: check_shipment_evidence (identifier: {identifier})")
         
         if not identifier:
-            logger.warning("No identifier provided in arguments")
             return {
                 "content": [
                     {"type": "text", "text": "❌ No identifier provided. Please provide an order ID, transaction ID, or tracking number."}
@@ -52,48 +47,27 @@ async def check_shipment_evidence_tool(args: dict[str, Any]) -> dict[str, Any]:
                 "is_error": False
             }
         
-        logger.info(f"Calling get_shipment_evidence_tool()")
         tool = get_shipment_evidence_tool()
-        logger.info(f"Tool instance obtained: {type(tool).__name__}")
-        
-        logger.info(f"Checking delivery status for: {identifier}")
         result = tool.check_delivery_status(identifier)
-        logger.info(f"Tool result - Found: {result.get('found', False)}")
         
         if result["found"]:
-            logger.info(f"✅ Evidence found for: {identifier}")
-            logger.info(f"Order ID: {result.get('order_id')}")
-            logger.info(f"Delivered: {result.get('delivered')}")
-            logger.info(f"Has signature: {result.get('has_signature')}")
-            logger.info(f"Has photo: {result.get('has_photo')}")
-            
-            response = {
+            logger.info(f"✅ Evidence found: {result.get('order_id')} (delivered: {result.get('delivered')})")
+            return {
                 "content": [
                     {"type": "text", "text": result["summary"]}
                 ]
             }
-            logger.info(f"Returning success response with {len(result['summary'])} characters")
-            logger.info("="*60)
-            return response
         else:
-            logger.warning(f"❌ No evidence found for: {identifier}")
-            response = {
+            logger.info(f"❌ No evidence found for: {identifier}")
+            return {
                 "content": [
                     {"type": "text", "text": f"❌ {result['message']}\n\nPlease verify the identifier and try again."}
                 ],
-                "is_error": False  # Not a critical error, just not found
+                "is_error": False
             }
-            logger.info("Returning not-found response")
-            logger.info("="*60)
-            return response
             
     except Exception as e:
-        logger.error("="*60)
-        logger.error("❌ ERROR in check_shipment_evidence_tool")
-        logger.error(f"Exception type: {type(e).__name__}")
-        logger.error(f"Exception message: {str(e)}")
-        logger.error("Full traceback:", exc_info=True)
-        logger.error("="*60)
+        logger.error(f"Error in check_shipment_evidence_tool: {str(e)}")
         return {
             "content": [
                 {"type": "text", "text": f"❌ Error checking shipment evidence: {str(e)}"}
@@ -143,92 +117,50 @@ class ClaudeService:
             str: Claude's analysis of the dispute
         """
         try:
-            logger.info("="*80)
-            logger.info("Starting dispute analysis")
-            logger.info(f"Transaction ID: {transaction_id}")
-            logger.info(f"Amount: {amount}")
-            logger.info(f"Description: {dispute_description[:100]}...")
+            logger.info(f"Starting dispute analysis (transaction: {transaction_id})")
             
             # Load and format prompt from file
-            logger.info("Loading and formatting prompt")
             prompt = self.prompt_loader.format_prompt(
                 "dispute_analysis",
                 dispute_description=dispute_description,
                 transaction_id=transaction_id,
                 amount=amount
             )
-            logger.info(f"Formatted prompt length: {len(prompt)} characters")
             
             # Get system prompt
-            logger.info("Loading system prompt")
             system_prompt = self.prompt_loader.get_system_prompt("dispute_analysis")
-            logger.info(f"System prompt: {system_prompt[:200]}...")
             
             # Configure Claude options with custom MCP tools
-            logger.info("Configuring Claude options")
-            logger.info(f"Max turns: {self.max_turns}")
-            logger.info(f"Allowed tools: ['mcp__dispute-tools__check_shipment_evidence']")
-            logger.info(f"MCP server configured: dispute-tools")
-            
             options = ClaudeAgentOptions(
                 max_turns=self.max_turns,
                 allowed_tools=["mcp__dispute-tools__check_shipment_evidence"],
                 mcp_servers={"dispute-tools": self.mcp_server},
                 system_prompt=system_prompt
             )
-            logger.info("Claude options configured successfully")
-            
-            # Query Claude using ClaudeSDKClient for better control
-            full_response = []
-            logger.info("Creating Claude SDK client")
             
             # Ensure API key is set
             if not os.getenv("ANTHROPIC_API_KEY"):
                 raise ValueError("ANTHROPIC_API_KEY environment variable is not set")
             
-            logger.info("Starting Claude query with SDK client")
-            message_count = 0
+            # Query Claude using ClaudeSDKClient
+            full_response = []
             
             async with ClaudeSDKClient(options=options) as client:
-                logger.info("Client initialized, sending query")
                 await client.query(prompt)
                 
-                logger.info("Receiving responses")
                 async for message in client.receive_response():
-                    message_count += 1
-                    logger.info(f"Received message #{message_count}: {type(message).__name__}")
-                    
                     if isinstance(message, AssistantMessage):
-                        logger.info(f"Processing AssistantMessage with {len(message.content)} content blocks")
-                        for idx, block in enumerate(message.content):
-                            logger.info(f"  Block #{idx + 1}: {type(block).__name__}")
+                        for block in message.content:
                             if isinstance(block, TextBlock):
-                                text_preview = block.text[:100] if len(block.text) > 100 else block.text
-                                logger.info(f"    Text preview: {text_preview}...")
                                 full_response.append(block.text)
-                            else:
-                                logger.info(f"    Block content: {str(block)[:200]}")
-                    else:
-                        logger.info(f"Non-AssistantMessage: {type(message)}")
-                        logger.info(f"Message content: {str(message)[:500]}")
-            
-            logger.info(f"Query completed. Received {message_count} messages")
-            logger.info(f"Collected {len(full_response)} text blocks")
             
             result = "\n".join(full_response) if full_response else "No analysis generated."
-            logger.info(f"Final response length: {len(result)} characters")
-            logger.info("Dispute analysis completed successfully")
-            logger.info("="*80)
+            logger.info(f"Dispute analysis completed (transaction: {transaction_id})")
             
             return result
             
         except Exception as e:
-            logger.error("="*80)
-            logger.error("ERROR in analyze_dispute")
-            logger.error(f"Exception type: {type(e).__name__}")
-            logger.error(f"Exception message: {str(e)}")
-            logger.error("Full traceback:", exc_info=True)
-            logger.error("="*80)
+            logger.error(f"Error in analyze_dispute: {str(e)}", exc_info=True)
             raise
     
     async def simple_query(self, prompt: str, use_tools: bool = False) -> str:
@@ -243,8 +175,6 @@ class ClaudeService:
             str: Claude's response
         """
         try:
-            logger.info(f"Simple query request (use_tools={use_tools})")
-            
             if use_tools:
                 options = ClaudeAgentOptions(
                     max_turns=self.max_turns,
@@ -268,11 +198,9 @@ class ClaudeService:
                             if isinstance(block, TextBlock):
                                 full_response.append(block.text)
             
-            result = "\n".join(full_response) if full_response else "No response generated."
-            logger.info(f"Simple query completed ({len(result)} chars)")
-            return result
+            return "\n".join(full_response) if full_response else "No response generated."
             
         except Exception as e:
-            logger.error(f"Error in simple_query: {e}", exc_info=True)
+            logger.error(f"Error in simple_query: {e}")
             raise
 

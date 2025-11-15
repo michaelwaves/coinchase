@@ -66,14 +66,9 @@ class ShipmentEvidenceTool:
         Returns:
             Dictionary containing shipment evidence or None if not found
         """
-        logger.info(f"Looking up shipment evidence for order_id: {order_id}")
-        
         for order in self.data.get("orders", []):
             if order.get("order_id") == order_id:
-                logger.info(f"Found shipment evidence for order_id: {order_id}")
                 return order
-        
-        logger.warning(f"No shipment evidence found for order_id: {order_id}")
         return None
     
     def get_evidence_by_transaction_id(self, transaction_id: str) -> Optional[Dict[str, Any]]:
@@ -86,14 +81,9 @@ class ShipmentEvidenceTool:
         Returns:
             Dictionary containing shipment evidence or None if not found
         """
-        logger.info(f"Looking up shipment evidence for transaction_id: {transaction_id}")
-        
         for order in self.data.get("orders", []):
             if order.get("transaction_id") == transaction_id:
-                logger.info(f"Found shipment evidence for transaction_id: {transaction_id}")
                 return order
-        
-        logger.warning(f"No shipment evidence found for transaction_id: {transaction_id}")
         return None
     
     def get_evidence_by_tracking_number(self, tracking_number: str) -> Optional[Dict[str, Any]]:
@@ -106,15 +96,10 @@ class ShipmentEvidenceTool:
         Returns:
             Dictionary containing shipment evidence or None if not found
         """
-        logger.info(f"Looking up shipment evidence for tracking_number: {tracking_number}")
-        
         for order in self.data.get("orders", []):
             shipment = order.get("shipment", {})
             if shipment.get("tracking_number") == tracking_number:
-                logger.info(f"Found shipment evidence for tracking_number: {tracking_number}")
                 return order
-        
-        logger.warning(f"No shipment evidence found for tracking_number: {tracking_number}")
         return None
     
     def get_evidence_by_customer_id(self, customer_id: str) -> list[Dict[str, Any]]:
@@ -127,15 +112,10 @@ class ShipmentEvidenceTool:
         Returns:
             List of orders for the customer
         """
-        logger.info(f"Looking up shipment evidence for customer_id: {customer_id}")
-        
-        orders = [
+        return [
             order for order in self.data.get("orders", [])
             if order.get("customer_id") == customer_id
         ]
-        
-        logger.info(f"Found {len(orders)} orders for customer_id: {customer_id}")
-        return orders
     
     def format_evidence_summary(self, evidence: Dict[str, Any]) -> str:
         """
@@ -213,8 +193,6 @@ Return Logistics:
         Returns:
             Dictionary with delivery status and evidence
         """
-        logger.info(f"Checking delivery status for identifier: {identifier}")
-        
         # Try each lookup method
         evidence = (
             self.get_evidence_by_order_id(identifier) or
@@ -223,7 +201,6 @@ Return Logistics:
         )
         
         if not evidence:
-            logger.warning(f"No evidence found for identifier: {identifier}")
             return {
                 "found": False,
                 "identifier": identifier,
@@ -234,7 +211,7 @@ Return Logistics:
         shipment = evidence.get("shipment", {})
         delivered = bool(shipment.get("delivery_date"))
         
-        result = {
+        return {
             "found": True,
             "identifier": identifier,
             "order_id": evidence.get("order_id"),
@@ -248,9 +225,6 @@ Return Logistics:
             "summary": self.format_evidence_summary(evidence),
             "full_evidence": evidence
         }
-        
-        logger.info(f"Successfully retrieved evidence for identifier: {identifier}")
-        return result
 
 
 # Singleton instance for easy access

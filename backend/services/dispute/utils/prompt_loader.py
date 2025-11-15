@@ -100,9 +100,7 @@ class PromptLoader:
         Returns:
             str: Formatted prompt
         """
-        logger.debug(f"Formatting prompt: {prompt_name} with kwargs: {kwargs}")
         prompt = self.load_prompt(prompt_name)
-        logger.debug(f"Loaded prompt length: {len(prompt)}")
         
         # Handle optional variables
         for key, value in kwargs.items():
