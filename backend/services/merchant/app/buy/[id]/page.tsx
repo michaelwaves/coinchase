@@ -2,7 +2,7 @@
 
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { products } from "@/middleware";
+import { products } from "@/lib/products";
 import { useEffect, useState } from "react";
 
 const generateTracking = () => {
