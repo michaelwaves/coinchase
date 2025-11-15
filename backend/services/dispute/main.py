@@ -8,7 +8,7 @@ from typing import Annotated
 
 from config import Settings, get_settings
 from models.schemas import HealthResponse
-from routers import claude
+from routers import claude, dispute_conversation
 
 # Configure logging
 logging.basicConfig(
@@ -38,6 +38,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(claude.router)
+app.include_router(dispute_conversation.router)
 
 
 @app.get("/", response_model=HealthResponse)
