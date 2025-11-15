@@ -5,7 +5,7 @@ import { facilitator } from "@coinbase/x402";
 
 config();
 
-const payToAddress = process.env.MERCHANT_WALLET_PUBLIC_KEY as `0x${string}`;
+const payToAddress = process.env.MERCHANT_WALLET_ADDRESS as `0x${string}`;
 
 // The CDP API key ID and secret are required to use the mainnet facilitator
 if (
@@ -19,27 +19,50 @@ if (
 
 const app = express();
 
+const products = [
+  {
+    id: "shirt",
+    title: "Locus Shirt",
+    price: 0.001,
+  },
+  {
+    id: "hoodie",
+    title: "Locus Hoodie",
+    price: 0.002,
+  },
+];
+
 app.use(
   paymentMiddleware(
     payToAddress,
-    {
-      "GET /weather": {
-        // USDC amount in dollars
-        price: "$0.001",
-        network: "base",
+    products.reduce(
+      (acc, product) => {
+        acc[`GET /buy/${product.id}`] = {
+          price: `$${product.price}`,
+          network: "base",
+        };
+
+        return acc;
       },
-    },
-    // Pass the mainnet facilitator to the payment middleware
+      {} as Record<string, any>
+    ),
     facilitator
   )
 );
 
-app.get("/weather", (req, res) => {
+app.get("/buy/:id", (req, res) => {
+  const productBought = products.find(
+    (product) => product.id === req.params.id
+  );
   res.send({
-    report: {
-      weather: "sunny",
-      temperature: 70,
-    },
+    description: `You bought the ${productBought?.title}!`,
+    trackingCode: "312313",
+  });
+});
+
+app.get("/products", (req, res) => {
+  res.send({
+    products,
   });
 });
 
