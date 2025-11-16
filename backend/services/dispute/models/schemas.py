@@ -7,7 +7,7 @@ from typing import Optional, Dict, Any, List
 
 class DisputeAnalysisRequest(BaseModel):
     """Request model for dispute analysis."""
-    
+
     dispute_description: str = Field(
         ...,
         description="Description of the dispute to analyze",
@@ -22,6 +22,10 @@ class DisputeAnalysisRequest(BaseModel):
         None,
         description="Disputed amount",
         ge=0
+    )
+    recipient_address: Optional[str] = Field(
+        None,
+        description="Wallet address (0x...) to send refund to if approved"
     )
     session_id: Optional[str] = Field(
         None,
