@@ -179,11 +179,23 @@ async def _build_completed_response(
 
     payment_result = None
 
+    # Check for approval in decision or justification text
+    decision_text = data.get("decision", "").upper()
+    justification_text = data.get("justification", "").upper()
+
+    approval_keywords = ["APPROVE", "APPROVED", "AUTHORIZED", "AUTHORIZE"]
+    has_approval = (
+        decision_text == "APPROVE_REFUND" or
+        any(keyword in decision_text for keyword in approval_keywords) or
+        any(keyword in justification_text for keyword in approval_keywords)
+    )
+
     should_process_refund = (
-        data["decision"] == "APPROVE_REFUND" and
+        has_approval and
         session.step < 3 and
         request.amount and
         request.recipient_address and
+
         request.transaction_id
     )
 

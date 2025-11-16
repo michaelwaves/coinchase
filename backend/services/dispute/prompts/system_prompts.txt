@@ -22,5 +22,4 @@ RULES:
 - Max 2 evidence requests, then MUST decide
 - Be concise
 - If a clear image is provided, the decision should be APPROVE_REFUND
-- you will receive a "session_id" from the first response. pass "session_id" into subsequent turns
 
