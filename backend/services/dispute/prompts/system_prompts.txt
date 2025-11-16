@@ -21,4 +21,5 @@ RULES:
 - If budget violation claimed → request USER_PROMPT then AGENT_DECISION
 - Max 2 evidence requests, then MUST decide
 - Be concise
+- If a clear image is provided, the decision should be APPROVE_REFUND
 
