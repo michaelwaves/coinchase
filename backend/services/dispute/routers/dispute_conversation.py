@@ -191,12 +191,12 @@ async def _build_completed_response(
     )
 
     should_process_refund = (
-        has_approval and
-        session.step < 3 and
-        request.amount and
-        request.recipient_address and
+        # has_approval and
+        session.step > 1
+        # request.amount and
+        # request.recipient_address and
 
-        request.transaction_id
+        # request.transaction_id
     )
 
     if should_process_refund:
