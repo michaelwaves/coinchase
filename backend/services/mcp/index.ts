@@ -13,6 +13,8 @@ import { Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { withPaymentInterceptor } from "x402-axios";
 import z from "zod";
+import { readFileSync } from "fs";
+import { extname } from "path";
 
 config();
 
@@ -49,6 +51,28 @@ const server = new McpServer({
   version: "1.0.0",
 });
 
+// Helper function to get media type from file extension
+function getMediaTypeFromExtension(filepath: string): string {
+  const ext = extname(filepath).toLowerCase();
+  const mimeTypes: { [key: string]: string } = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".bmp": "image/bmp",
+  };
+  return mimeTypes[ext] || "image/jpeg";
+}
+
+// Helper function to convert file to base64
+function fileToBase64(filepath: string): { data: string; mediaType: string } {
+  const fileBuffer = readFileSync(filepath);
+  const base64Data = fileBuffer.toString("base64");
+  const mediaType = getMediaTypeFromExtension(filepath);
+  return { data: base64Data, mediaType };
+}
+
 server.tool(
   "purchase-product",
   "Purchase a product from the store by its ID",
@@ -60,8 +84,6 @@ server.tool(
 
     const res = await client.get(`${merchantUrl}/buy/${productId}`);
 
-    const productsCall = await axios.get(merchantUrl + "/api/products");
-    const products = productsCall.data.products;
     const product = products.find(p => p.id === productId);
 
     return {
@@ -80,32 +102,59 @@ server.tool("get-products", "Get the products in the store", {}, async () => {
 
 server.tool(
   "chargeback",
-  "Create a chargeback for a given product",
+  "Create a chargeback for a given product. You can optionally include image file paths as evidence.",
   {
     productId: z.string().describe("The ID of the product to be disputed"),
     disputeDescription: z
       .string()
       .describe("A description of the dispute or the reply to an existing dispute"),
+    imagePaths: z
+      .array(z.string())
+      .optional()
+      .describe(
+        "Optional array of file paths to images supporting the dispute (e.g., photos of damaged product)",
+      ),
     sessionId: z
       .string()
       .optional()
       .describe("The session ID of an existing dispute if replying to an existing dispute"),
   },
   async params => {
-    const { productId, disputeDescription, sessionId } = params;
+    const { productId, disputeDescription, sessionId, imagePaths } = params;
 
-    const productsCall = await axios.get(merchantUrl + "/api/products");
-    const products = productsCall.data.products;
     const product = products.find(p => p.id === productId);
     const productAmount = product?.price;
 
-    const res = await axios.post(escrowAgentUrl + "/dispute/analyze", {
+    // Convert image file paths to base64 if provided
+    let images: Array<{ data: string; mediaType: string }> | undefined;
+    if (imagePaths && imagePaths.length > 0) {
+      try {
+        images = imagePaths.map(filepath => fileToBase64(filepath));
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Error reading image files: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+        };
+      }
+    }
+
+    const requestBody: any = {
       dispute_description: disputeDescription,
       transaction_id: "TXN-20241101-A7B3",
       amount: productAmount,
       address: account.address,
       sessionId,
-    });
+    };
+
+    if (images) {
+      requestBody.images = images;
+    }
+
+    const res = await axios.post(escrowAgentUrl + "/dispute/analyze", requestBody);
 
     const data = res.data;
 
