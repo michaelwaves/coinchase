@@ -62,7 +62,7 @@ def parse_agent_response(response_text: str, step: int) -> Tuple[str, dict]:
             },
         )
 
-    # Check for final decision
+    # Check for structured decision format
     decision_pattern = r"DECISION:\s*(APPROVE_REFUND|DENY_REFUND)\s*\|\s*CONFIDENCE:\s*([\d.]+)\s*\|\s*JUSTIFICATION:\s*(.+)"
     match = re.search(decision_pattern, response_text, re.DOTALL | re.IGNORECASE)
 
@@ -77,6 +77,31 @@ def parse_agent_response(response_text: str, step: int) -> Tuple[str, dict]:
                 "decision": decision_type,
                 "confidence": confidence,
                 "justification": justification,
+            },
+        )
+
+    # Check for natural language approval/denial patterns
+    response_upper = response_text.upper()
+
+    # Extract confidence/certainty percentage
+    confidence_match = re.search(r"(?:CERTAINTY|CONFIDENCE).*?(\d+)%", response_text, re.IGNORECASE)
+    confidence = float(confidence_match.group(1)) / 100 if confidence_match else 0.75
+
+    # Check for approval keywords
+    approval_keywords = ["APPROVED", "REFUND AUTHORIZED", "AUTHORIZE REFUND", "APPROVE REFUND"]
+    denial_keywords = ["DENIED", "DENY REFUND", "REJECT"]
+
+    is_approval = any(keyword in response_upper for keyword in approval_keywords)
+    is_denial = any(keyword in response_upper for keyword in denial_keywords)
+
+    if is_approval or is_denial:
+        decision_type = "APPROVE_REFUND" if is_approval else "DENY_REFUND"
+        return (
+            "completed",
+            {
+                "decision": decision_type,
+                "confidence": confidence,
+                "justification": response_text[:500],  # First 500 chars as justification
             },
         )
 
@@ -330,6 +355,43 @@ async def analyze_dispute_conversation(
             return await _build_completed_response(session, request, data, session_manager)
         
         else:  # analyzing
+            # Check if message contains strong approval signal (for backward compatibility)
+            message_upper = data["message"].upper()
+            has_approval = any(
+                keyword in message_upper
+                for keyword in ["APPROVED", "REFUND AUTHORIZED", "AUTHORIZE REFUND"]
+            )
+
+            # Extract confidence from message
+            confidence_match = re.search(r"(?:CERTAINTY|CONFIDENCE).*?(\d+)%", data["message"], re.IGNORECASE)
+            confidence = float(confidence_match.group(1)) / 100 if confidence_match else 0.0
+
+            # If high confidence approval detected in analyzing message, process as refund
+            if has_approval and confidence >= 0.70 and session.step < 3 and request.amount and request.recipient_address and request.transaction_id:
+                logger.info(f"Detected high-confidence approval in analyzing message (confidence: {confidence})")
+                try:
+                    settings = get_settings()
+                    payment_result = await send_refund_to_address(
+                        address=request.recipient_address,  # type: ignore
+                        amount=request.amount,  # type: ignore
+                        transaction_id=request.transaction_id,  # type: ignore
+                        settings=settings
+                    )
+                    logger.info(f"Refund processed from analyzing state: {payment_result}")
+
+                    # Return as analyzing but note refund was processed
+                    return DisputeAnalysisResponse(
+                        status="analyzing",
+                        session_id=session.session_id,
+                        transaction_id=request.transaction_id,
+                        evidence_requested=None,
+                        decision=None,
+                        message=f"{data['message']}\n\n✅ Refund of ${request.amount} automatically processed to {request.recipient_address}",
+                        step=session.step,
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to process refund from analyzing state: {str(e)}", exc_info=True)
+
             if session.step >= 3:
                 return _build_default_decision_response(session, request)
 
